@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#121212</color>
+    <color name="surface">#1E1E1E</color>
+    <color name="surface_alt">#2A2A2A</color>
+    <color name="accent">#2E7D6B</color>
+    <color name="accent_pressed">#246355</color>
+    <color name="text">#F2F2F2</color>
+    <color name="text_secondary">#B3B3B3</color>
+    <color name="button_selected_text">#121212</color>
+    <color name="button_idle_text">#F2F2F2</color>
+    <color name="row_selected">#243B36</color>
+    <color name="ic_launcher_bg">#1B4D3E</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

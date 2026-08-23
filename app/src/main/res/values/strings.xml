@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Música Simple</string>
+    <string name="albumes">Álbumes</string>
+    <string name="carpetas">Carpetas</string>
+    <string name="actualizar">Actualizar</string>
+    <string name="reproducir">Reproducir</string>
+    <string name="pausar">Pausar</string>
+    <string name="siguiente">Siguiente</string>
+    <string name="anterior">Anterior</string>
+    <string name="reproducir_todo">Reproducir todo</string>
+    <string name="permiso_titulo">Permiso de almacenamiento</string>
+    <string name="permiso_texto">Para ver los CDs que copiaste al teléfono o a la tarjeta SD, hay que permitir el acceso a los archivos de audio. La app no usa internet.</string>
+    <string name="conceder_permiso">Conceder permiso</string>
+    <string name="vacio_titulo">No se encontró música</string>
+    <string name="vacio_texto">Copia tus archivos (mp3, flac, ogg, wav, aac) a la carpeta Música o Descargas y pulsa Actualizar. También aparecen los álbumes que ya indexó el teléfono.</string>
+    <string name="nada_sonando">Nada sonando</string>
+    <string name="elige_album_o_carpeta">Elige un álbum o una carpeta</string>
+    <string name="notification_channel">Reproducción</string>
+</resources>

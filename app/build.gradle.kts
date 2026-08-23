@@ -11,8 +11,8 @@ android {
         applicationId = "cl.felipebrunet.musica"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         // Galaxy A10 (Exynos 7884) needs 32-bit; also ship 64-bit.
         ndk {
@@ -27,8 +27,12 @@ android {
             isMinifyEnabled = false
         }
         release {
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
+            // Unsigned on purpose: Felipe signs locally with his .jks.
+            // Do not attach debug or any repo keystore.
+            signingConfig = null
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

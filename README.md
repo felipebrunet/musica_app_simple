@@ -60,12 +60,28 @@ El APK queda en:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-El APK de depuración basta para usarlo en casa. No hay keystore ni secretos en el repositorio.
+El APK de depuración basta para usarlo en casa. **No hay keystore ni secretos en el repositorio.**
 
-Para una build de publicación (opcional, firma tu propio keystore):
+Para una build de *release* **sin firmar** (minify/shrink, `debuggable false`):
 
 ```bash
 ./gradlew :app:assembleRelease
+```
+
+El APK queda en:
+
+```
+app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+Android no instala un APK sin firma. Firma en tu computador, con tu `.jks` (nunca lo subas al repo):
+
+```bash
+# Ejemplo; ajusta alias y rutas. Te pedirá las contraseñas en la terminal.
+"$ANDROID_HOME/build-tools/34.0.0/apksigner" sign \
+  --ks /ruta/secreta/tu.jks \
+  --out musica-simple-0.1.1-release.apk \
+  app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 ### Instalar el SDK en un computador Linux (si no lo tienes)

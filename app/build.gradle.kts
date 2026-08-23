@@ -18,6 +18,8 @@ android {
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
+        // UI is Spanish-only; drop unused AppCompat locales to keep the APK small.
+        resourceConfigurations += listOf("es")
     }
 
     buildTypes {

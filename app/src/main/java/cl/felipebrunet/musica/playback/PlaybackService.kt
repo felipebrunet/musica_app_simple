@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.Process
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -174,7 +175,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?
-    ): BrowserRoot {
+    ): BrowserRoot? {
+        // Bluetooth / lock screen use MediaSession, not MediaBrowser.
+        // Reject other apps so they cannot browse or send PLAY_QUEUE.
+        if (clientUid != Process.myUid() || clientPackageName != packageName) {
+            return null
+        }
         return BrowserRoot(ROOT_ID, null)
     }
 

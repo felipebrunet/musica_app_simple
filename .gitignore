@@ -1,17 +1,49 @@
+# Gradle / IDE
 .gradle/
 .idea/
 *.iml
+.kotlin/
+.vscode/
+*.swp
+*~
+
+# Local SDK path and machine config
 local.properties
-.DS_Store
+
+# Build outputs
 **/build/
+bin/
+gen/
+out/
 captures/
+.cxx/
+.externalNativeBuild/
 *.apk
 *.ap_
 *.aab
-*.keystore
-*.jks
-keystore.properties
-.cxx/
-.externalNativeBuild/
+*.apks
+*.apk.idsig
+*.dex
+*.class
 *.hprof
-.kotlin/
+
+# Signing — never commit
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+*.pk8
+keystore.properties
+signing.properties
+secrets.properties
+
+# Accidental cloud / env secrets
+.env
+.env.*
+google-services.json
+
+# OS / logs
+.DS_Store
+Thumbs.db
+*.log

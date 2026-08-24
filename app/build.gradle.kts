@@ -11,8 +11,8 @@ android {
         applicationId = "cl.felipebrunet.musica"
         minSdk = 28
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
 
         // Galaxy A10 (Exynos 7884) needs 32-bit; also ship 64-bit.
         ndk {

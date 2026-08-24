@@ -7,7 +7,8 @@ import cl.felipebrunet.musica.data.Group
 import cl.felipebrunet.musica.databinding.ItemGroupBinding
 
 class GroupAdapter(
-    private val onClick: (Group) -> Unit
+    private val onClick: (Group) -> Unit,
+    private val onLongClick: ((Group) -> Boolean)? = null
 ) : RecyclerView.Adapter<GroupAdapter.Holder>() {
 
     private var items: List<Group> = emptyList()
@@ -33,6 +34,9 @@ class GroupAdapter(
             binding.title.text = group.title
             binding.subtitle.text = group.subtitle
             binding.root.setOnClickListener { onClick(group) }
+            binding.root.setOnLongClickListener {
+                onLongClick?.invoke(group) ?: false
+            }
         }
     }
 }

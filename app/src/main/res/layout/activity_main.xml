@@ -54,32 +54,63 @@
             android:background="@drawable/bg_mode_button"
             android:text="@string/albumes"
             android:textAllCaps="false"
-            android:textSize="17sp" />
+            android:textSize="16sp" />
 
         <Button
             android:id="@+id/btnFolders"
             android:layout_width="0dp"
             android:layout_height="52dp"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:background="@drawable/bg_mode_button"
             android:text="@string/carpetas"
             android:textAllCaps="false"
-            android:textSize="17sp" />
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnPlaylists"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_mode_button"
+            android:text="@string/listas"
+            android:textAllCaps="false"
+            android:textSize="16sp" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnPlayFolder"
+    <LinearLayout
+        android:id="@+id/trackActions"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="12dp"
-        android:layout_marginBottom="8dp"
-        android:background="@drawable/bg_accent_button"
-        android:text="@string/reproducir_todo"
-        android:textAllCaps="false"
-        android:textColor="@color/button_selected_text"
-        android:textSize="17sp"
-        android:visibility="gone" />
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/btnPlayFolder"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_accent_button"
+            android:text="@string/reproducir_todo"
+            android:textAllCaps="false"
+            android:textColor="@color/button_selected_text"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnSavePlaylist"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_mode_button"
+            android:text="@string/guardar_lista"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -140,6 +171,7 @@
             android:visibility="gone">
 
             <TextView
+                android:id="@+id/emptyTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/vacio_titulo"
@@ -148,6 +180,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/emptyBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"

@@ -152,7 +152,7 @@ class LibraryRepository {
         }
 
         @Suppress("DEPRECATION")
-        private fun musicRoots(context: Context): List<File> {
+        fun storageRoots(context: Context): List<File> {
             val roots = LinkedHashSet<File>()
             addIfExists(roots, Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC))
             addIfExists(roots, Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
@@ -170,6 +170,8 @@ class LibraryRepository {
             }
             return roots.toList()
         }
+
+        private fun musicRoots(context: Context): List<File> = storageRoots(context)
 
         private fun addIfExists(into: MutableSet<File>, file: File?) {
             if (file != null && file.exists()) {

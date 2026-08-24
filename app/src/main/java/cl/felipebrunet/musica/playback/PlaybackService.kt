@@ -13,6 +13,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -193,7 +194,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         persist()
-        super.onTaskRemoved(rootIntent)
+        // Keep playing with the screen off / app swiped away. Only an explicit
+        // Stop (notification) should tear the service down.
+        if (!actuallyPlaying() && !playWhenReady) {
+            stopInternal()
+        }
     }
 
     private fun restoreFromDisk() {
@@ -218,7 +223,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         persist()
         // Show the notification immediately so a foreground start never times out
         // while MediaPlayer prepares a large FLAC from the SD card.
-        startForeground(NOTIFICATION_ID, buildNotification())
+        enterForeground()
 
         releasePlayer()
         preparing = true
@@ -295,7 +300,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             mp.start()
             playWhenReady = true
             registerNoisy()
-            startForeground(NOTIFICATION_ID, buildNotification())
+            enterForeground()
             persist()
         } catch (_: IllegalStateException) {
             playIndex(index, start = true, seekMs = currentPosition())
@@ -315,8 +320,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
         persist()
         publishState()
-        refreshNotification()
-        stopForeground(false)
+        // Stay a foreground service while paused so Samsung does not kill us
+        // when the A10 screen turns off in the car.
+        enterForeground()
     }
 
     private fun stopInternal() {
@@ -479,8 +485,20 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun refreshNotification() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification())
+        enterForeground()
+    }
+
+    private fun enterForeground() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun buildNotification(): Notification {
@@ -503,7 +521,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setContentIntent(openApp)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
-            .setOngoing(playing)
+            .setOngoing(queue.isNotEmpty())
             .addAction(
                 NotificationCompat.Action(
                     R.drawable.ic_prev,

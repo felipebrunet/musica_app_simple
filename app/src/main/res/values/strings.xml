@@ -3,6 +3,7 @@
     <string name="app_name">Música Simple</string>
     <string name="albumes">Álbumes</string>
     <string name="carpetas">Carpetas</string>
+    <string name="listas">Listas</string>
     <string name="actualizar">Actualizar</string>
     <string name="reproducir">Reproducir</string>
     <string name="pausar">Pausar</string>
@@ -15,6 +16,20 @@
     <string name="vacio_titulo">No se encontró música</string>
     <string name="vacio_texto">Copia tus archivos (mp3, flac, ogg, wav, aac) a la carpeta Música o Descargas y pulsa Actualizar. También aparecen los álbumes que ya indexó el teléfono.</string>
     <string name="nada_sonando">Nada sonando</string>
-    <string name="elige_album_o_carpeta">Elige un álbum o una carpeta</string>
+    <string name="elige_album_o_carpeta">Elige un álbum, carpeta o lista</string>
     <string name="notification_channel">Reproducción</string>
+    <string name="guardar_lista">Guardar lista</string>
+    <string name="nueva_lista">Nueva lista</string>
+    <string name="nombre_lista">Nombre de la lista</string>
+    <string name="guardar">Guardar</string>
+    <string name="cancelar">Cancelar</string>
+    <string name="borrar">Borrar</string>
+    <string name="lista_guardada">Lista guardada</string>
+    <string name="borrar_lista_titulo">¿Borrar esta lista?</string>
+    <string name="borrar_lista_texto">Solo se borra la lista, no las canciones.</string>
+    <string name="vacio_listas_titulo">No hay listas</string>
+    <string name="vacio_listas_texto">Abre un álbum o una carpeta y pulsa Guardar lista. También se leen archivos .m3u en Música.</string>
+    <string name="segundo_plano_titulo">Música con la pantalla apagada</string>
+    <string name="segundo_plano_texto">Para que siga sonando en el auto, elige Permitir en la siguiente pantalla.\n\nEn Samsung también: Ajustes → Cuidado del dispositivo → Batería → Apps que nunca duermen → Música Simple.</string>
+    <string name="entendido">Entendido</string>
 </resources>

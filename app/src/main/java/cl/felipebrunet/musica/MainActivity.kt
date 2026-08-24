@@ -2,19 +2,26 @@ package cl.felipebrunet.musica
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.View
+import android.widget.EditText
 import android.widget.SeekBar
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,17 +36,22 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
+    private enum class BrowseMode { ALBUMS, FOLDERS, PLAYLISTS }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var browser: MediaBrowserCompat
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
-    private val groupAdapter = GroupAdapter { openGroup(it) }
+    private val groupAdapter = GroupAdapter(
+        onClick = { openGroup(it) },
+        onLongClick = { confirmDeletePlaylist(it) }
+    )
     private val trackAdapter = TrackAdapter { _, index -> playCurrentGroup(index) }
 
     private var showingTracks = false
     private var currentGroup: Group? = null
-    private var albumsMode = true
+    private var browseMode = BrowseMode.ALBUMS
     private var userSeeking = false
 
     private val permissionLauncher = registerForActivityResult(
@@ -48,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         val granted = storageGranted() || result.entries.any { it.key != Manifest.permission.POST_NOTIFICATIONS && it.value }
         if (granted) {
             loadLibrary()
+            maybeAskBackgroundPlayback()
         } else {
             showPermission()
         }
@@ -97,8 +110,9 @@ class MainActivity : AppCompatActivity() {
         binding.list.adapter = groupAdapter
         binding.list.itemAnimator = null
 
-        binding.btnAlbums.setOnClickListener { showAlbums() }
-        binding.btnFolders.setOnClickListener { showFolders() }
+        binding.btnAlbums.setOnClickListener { showBrowse(BrowseMode.ALBUMS) }
+        binding.btnFolders.setOnClickListener { showBrowse(BrowseMode.FOLDERS) }
+        binding.btnPlaylists.setOnClickListener { showBrowse(BrowseMode.PLAYLISTS) }
         binding.btnRefresh.setOnClickListener { loadLibrary() }
         binding.btnGrant.setOnClickListener { requestNeededPermissions() }
         binding.btnPlay.setOnClickListener { togglePlay() }
@@ -109,6 +123,7 @@ class MainActivity : AppCompatActivity() {
             MediaControllerCompat.getMediaController(this)?.transportControls?.skipToNext()
         }
         binding.btnPlayFolder.setOnClickListener { playCurrentGroup(0) }
+        binding.btnSavePlaylist.setOnClickListener { saveCurrentGroupAsPlaylist() }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -151,6 +166,7 @@ class MainActivity : AppCompatActivity() {
 
         if (storageGranted()) {
             loadLibrary()
+            maybeAskBackgroundPlayback()
         } else {
             showPermission()
             requestNeededPermissions()
@@ -211,10 +227,11 @@ class MainActivity : AppCompatActivity() {
         io.execute {
             val app = application as MusicaApp
             app.library.scan(this)
+            app.playlists.scan(this, app.library.tracks)
             main.post {
                 if (showingTracks) {
                     val key = currentGroup?.key
-                    val groups = if (albumsMode) app.library.albums() else app.library.folders()
+                    val groups = currentGroups()
                     currentGroup = groups.firstOrNull { it.key == key }
                     val tracks = currentGroup?.tracks.orEmpty()
                     if (tracks.isEmpty()) {
@@ -229,28 +246,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAlbums() {
-        albumsMode = true
+    private fun showBrowse(mode: BrowseMode) {
+        browseMode = mode
         showingTracks = false
         currentGroup = null
         updateModeButtons()
         showCurrentBrowse()
     }
 
-    private fun showFolders() {
-        albumsMode = false
-        showingTracks = false
-        currentGroup = null
-        updateModeButtons()
-        showCurrentBrowse()
+    private fun currentGroups(): List<Group> {
+        val app = application as MusicaApp
+        return when (browseMode) {
+            BrowseMode.ALBUMS -> app.library.albums()
+            BrowseMode.FOLDERS -> app.library.folders()
+            BrowseMode.PLAYLISTS -> app.playlists.groups()
+        }
     }
 
     private fun showCurrentBrowse() {
         showingTracks = false
+        binding.trackActions.visibility = View.GONE
         binding.btnPlayFolder.visibility = View.GONE
+        binding.btnSavePlaylist.visibility = View.GONE
         binding.list.adapter = groupAdapter
-        val app = application as MusicaApp
-        val groups = if (albumsMode) app.library.albums() else app.library.folders()
+        val groups = currentGroups()
         groupAdapter.submit(groups)
         if (!storageGranted()) {
             showPermission()
@@ -258,6 +277,13 @@ class MainActivity : AppCompatActivity() {
             binding.list.visibility = View.GONE
             binding.permissionBox.visibility = View.GONE
             binding.emptyBox.visibility = View.VISIBLE
+            if (browseMode == BrowseMode.PLAYLISTS) {
+                binding.emptyTitle.setText(R.string.vacio_listas_titulo)
+                binding.emptyBody.setText(R.string.vacio_listas_texto)
+            } else {
+                binding.emptyTitle.setText(R.string.vacio_titulo)
+                binding.emptyBody.setText(R.string.vacio_texto)
+            }
         } else {
             binding.list.visibility = View.VISIBLE
             binding.permissionBox.visibility = View.GONE
@@ -270,7 +296,7 @@ class MainActivity : AppCompatActivity() {
         binding.list.visibility = View.GONE
         binding.emptyBox.visibility = View.GONE
         binding.permissionBox.visibility = View.VISIBLE
-        binding.btnPlayFolder.visibility = View.GONE
+        binding.trackActions.visibility = View.GONE
     }
 
     private fun openGroup(group: Group) {
@@ -285,7 +311,10 @@ class MainActivity : AppCompatActivity() {
         binding.list.visibility = View.VISIBLE
         binding.list.adapter = trackAdapter
         binding.toolbarTitle.text = group.title
+        binding.trackActions.visibility = View.VISIBLE
         binding.btnPlayFolder.visibility = View.VISIBLE
+        val canSave = browseMode != BrowseMode.PLAYLISTS
+        binding.btnSavePlaylist.visibility = if (canSave) View.VISIBLE else View.GONE
         val playingUri = MediaControllerCompat.getMediaController(this)
             ?.metadata
             ?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
@@ -396,11 +425,97 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateModeButtons() {
-        binding.btnAlbums.isSelected = albumsMode && !showingTracks
-        binding.btnFolders.isSelected = !albumsMode && !showingTracks
+        binding.btnAlbums.isSelected = browseMode == BrowseMode.ALBUMS && !showingTracks
+        binding.btnFolders.isSelected = browseMode == BrowseMode.FOLDERS && !showingTracks
+        binding.btnPlaylists.isSelected = browseMode == BrowseMode.PLAYLISTS && !showingTracks
         val selected = ContextCompat.getColor(this, R.color.button_selected_text)
         val idle = ContextCompat.getColor(this, R.color.button_idle_text)
-        binding.btnAlbums.setTextColor(if (albumsMode) selected else idle)
-        binding.btnFolders.setTextColor(if (!albumsMode) selected else idle)
+        binding.btnAlbums.setTextColor(if (browseMode == BrowseMode.ALBUMS) selected else idle)
+        binding.btnFolders.setTextColor(if (browseMode == BrowseMode.FOLDERS) selected else idle)
+        binding.btnPlaylists.setTextColor(if (browseMode == BrowseMode.PLAYLISTS) selected else idle)
+    }
+
+    private fun saveCurrentGroupAsPlaylist() {
+        val group = currentGroup ?: return
+        askPlaylistName(group.title) { name ->
+            io.execute {
+                val app = application as MusicaApp
+                app.playlists.create(this, name, group.tracks)
+                main.post {
+                    Toast.makeText(this, R.string.lista_guardada, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun confirmDeletePlaylist(group: Group): Boolean {
+        if (browseMode != BrowseMode.PLAYLISTS) return false
+        val playlist = (application as MusicaApp).playlists.playlists.firstOrNull { it.id == group.key }
+        if (playlist == null || !playlist.editable) return false
+        AlertDialog.Builder(this)
+            .setTitle(R.string.borrar_lista_titulo)
+            .setMessage(R.string.borrar_lista_texto)
+            .setPositiveButton(R.string.borrar) { _, _ ->
+                (application as MusicaApp).playlists.deleteOwned(playlist.id)
+                showCurrentBrowse()
+            }
+            .setNegativeButton(R.string.cancelar, null)
+            .show()
+        return true
+    }
+
+    private fun askPlaylistName(defaultName: String, onName: (String) -> Unit) {
+        val input = EditText(this)
+        input.setText(defaultName)
+        input.setSelection(input.text.length)
+        input.hint = getString(R.string.nombre_lista)
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        input.setPadding(pad, pad, pad, pad)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.nueva_lista)
+            .setView(input)
+            .setPositiveButton(R.string.guardar) { _, _ ->
+                val name = input.text.toString().trim().ifBlank { defaultName }
+                onName(name)
+            }
+            .setNegativeButton(R.string.cancelar, null)
+            .show()
+    }
+
+    private fun maybeAskBackgroundPlayback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
+        if (prefs.getBoolean("battery_asked", false)) return
+        val pm = getSystemService(PowerManager::class.java)
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            prefs.edit().putBoolean("battery_asked", true).apply()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.segundo_plano_titulo)
+            .setMessage(R.string.segundo_plano_texto)
+            .setPositiveButton(R.string.entendido) { _, _ ->
+                prefs.edit().putBoolean("battery_asked", true).apply()
+                requestIgnoreBatteryOptimizations()
+            }
+            .setNegativeButton(R.string.cancelar) { _, _ ->
+                prefs.edit().putBoolean("battery_asked", true).apply()
+            }
+            .show()
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+            }
+        }
     }
 }

@@ -25,6 +25,81 @@ class LibraryGroupsTest {
     }
 
     @Test
+    fun compilationFolderKeepsOneAlbumDespiteOriginalTags() {
+        val folder = "/Music/70s Greatest Hits"
+        val tracks = listOf(
+            track(
+                title = "Hotel California",
+                album = "Hotel California",
+                artist = "Eagles",
+                number = 1,
+                display = "02-hotel.mp3",
+                folder = folder,
+                folderName = "70s Greatest Hits"
+            ),
+            track(
+                title = "Let It Be",
+                album = "Let It Be",
+                artist = "Beatles",
+                number = 6,
+                display = "01-let-it-be.mp3",
+                folder = folder,
+                folderName = "70s Greatest Hits"
+            )
+        )
+        val albums = LibraryGroups.albums(tracks)
+        assertEquals(1, albums.size)
+        assertEquals("70s Greatest Hits", albums[0].title)
+        assertTrue(albums[0].subtitle.startsWith("Varios artistas"))
+        assertEquals(listOf("Let It Be", "Hotel California"), albums[0].tracks.map { it.title })
+    }
+
+    @Test
+    fun variousArtistsSameAlbumTagStayTogether() {
+        val folder = "/Music/70s Greatest Hits"
+        val tracks = listOf(
+            track(title = "One", album = "70s Greatest Hits", artist = "Eagles", display = "01-one.mp3", folder = folder, folderName = "70s Greatest Hits"),
+            track(title = "Two", album = "70s Greatest Hits", artist = "Beatles", display = "02-two.mp3", folder = folder, folderName = "70s Greatest Hits")
+        )
+        val albums = LibraryGroups.albums(tracks)
+        assertEquals(1, albums.size)
+        assertEquals("70s Greatest Hits", albums[0].title)
+        assertEquals(listOf("One", "Two"), albums[0].tracks.map { it.title })
+    }
+
+    @Test
+    fun genericMusicFolderSplitsByAlbumTag() {
+        val tracks = listOf(
+            track(title = "A", album = "Wall", artist = "Floyd", folder = "/Music", folderName = "Music"),
+            track(title = "B", album = "Help", artist = "Beatles", folder = "/Music", folderName = "Music")
+        )
+        val albums = LibraryGroups.albums(tracks)
+        assertEquals(setOf("Help", "Wall"), albums.map { it.title }.toSet())
+    }
+
+    @Test
+    fun sameAlbumInTwoDiscsMerges() {
+        val tracks = listOf(
+            track(title = "A", album = "Wall", artist = "Floyd", disc = 1, number = 1, folder = "/Music/Wall/CD1", folderName = "CD1"),
+            track(title = "B", album = "Wall", artist = "Floyd", disc = 2, number = 1, folder = "/Music/Wall/CD2", folderName = "CD2")
+        )
+        val albums = LibraryGroups.albums(tracks)
+        assertEquals(1, albums.size)
+        assertEquals("Wall", albums[0].title)
+        assertEquals(listOf("A", "B"), albums[0].tracks.map { it.title })
+    }
+
+    @Test
+    fun searchMatchesAccentInsensitiveSong() {
+        val group = LibraryGroups.albums(
+            listOf(track(title = "Canción", album = "Álbum", artist = "Música", folder = "/Music/Album", folderName = "Album"))
+        ).first()
+        val found = LibraryGroups.filterGroups(listOf(group), "cancion")
+        assertEquals(1, found.size)
+        assertTrue(LibraryGroups.trackMatches(group.tracks[0], LibraryGroups.foldForSearch("musica")))
+    }
+
+    @Test
     fun foldersGroupByPathAndSortByFileName() {
         val tracks = listOf(
             track(title = "Z", display = "02-z.mp3", folder = "/Music/Disco", folderName = "Disco"),

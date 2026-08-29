@@ -32,4 +32,7 @@
     <string name="segundo_plano_titulo">Música con la pantalla apagada</string>
     <string name="segundo_plano_texto">Para que siga sonando en el auto, elige Permitir en la siguiente pantalla.\n\nEn Samsung también: Ajustes → Cuidado del dispositivo → Batería → Apps que nunca duermen → Música Simple.</string>
     <string name="entendido">Entendido</string>
+    <string name="buscar">Buscar álbum, canción o lista</string>
+    <string name="sin_resultados_titulo">Sin resultados</string>
+    <string name="sin_resultados_texto">No hay álbumes, carpetas ni listas con ese texto. Prueba con el nombre de una canción o un artista.</string>
 </resources>

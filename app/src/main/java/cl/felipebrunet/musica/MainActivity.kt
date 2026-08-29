@@ -16,6 +16,8 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.SeekBar
 import android.widget.Toast
@@ -24,8 +26,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import cl.felipebrunet.musica.data.Group
+import cl.felipebrunet.musica.data.LibraryGroups
 import cl.felipebrunet.musica.data.LibraryRepository
 import cl.felipebrunet.musica.data.Track
 import cl.felipebrunet.musica.databinding.ActivityMainBinding
@@ -54,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var browseMode = BrowseMode.ALBUMS
     private var userSeeking = false
     private var libraryLoadGeneration = 0
+    private val browseScroll = HashMap<BrowseMode, ScrollPos>()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -121,6 +126,19 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnPlayFolder.setOnClickListener { playCurrentGroup(0) }
         binding.btnSavePlaylist.setOnClickListener { saveCurrentGroupAsPlaylist() }
+        binding.search.addTextChangedListener {
+            if (!showingTracks) {
+                showCurrentBrowse()
+            }
+        }
+        binding.search.setOnEditorActionListener { view, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                hideKeyboard(view)
+                true
+            } else {
+                false
+            }
+        }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -296,11 +314,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBrowse(mode: BrowseMode) {
+        val leavingTracks = showingTracks
+        val switching = browseMode != mode
+        if (!showingTracks && switching) {
+            saveBrowseScroll()
+        }
         browseMode = mode
         showingTracks = false
         currentGroup = null
         updateModeButtons()
         showCurrentBrowse()
+        if (leavingTracks || switching) {
+            restoreBrowseScroll()
+        }
     }
 
     private fun currentGroups(): List<Group> {
@@ -312,13 +338,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun searchQuery(): String {
+        return if (::binding.isInitialized) {
+            binding.search.text?.toString().orEmpty()
+        } else {
+            ""
+        }
+    }
+
     private fun showCurrentBrowse() {
         showingTracks = false
+        binding.search.visibility = View.VISIBLE
         binding.trackActions.visibility = View.GONE
         binding.btnPlayFolder.visibility = View.GONE
         binding.btnSavePlaylist.visibility = View.GONE
-        binding.list.adapter = groupAdapter
-        val groups = currentGroups()
+        if (binding.list.adapter !== groupAdapter) {
+            binding.list.adapter = groupAdapter
+        }
+        val allGroups = currentGroups()
+        val groups = LibraryGroups.filterGroups(allGroups, searchQuery())
         groupAdapter.submit(groups)
         if (!storageGranted()) {
             showPermission()
@@ -326,7 +364,10 @@ class MainActivity : AppCompatActivity() {
             binding.list.visibility = View.GONE
             binding.permissionBox.visibility = View.GONE
             binding.emptyBox.visibility = View.VISIBLE
-            if (browseMode == BrowseMode.PLAYLISTS) {
+            if (searchQuery().isNotBlank() && allGroups.isNotEmpty()) {
+                binding.emptyTitle.setText(R.string.sin_resultados_titulo)
+                binding.emptyBody.setText(R.string.sin_resultados_texto)
+            } else if (browseMode == BrowseMode.PLAYLISTS) {
                 binding.emptyTitle.setText(R.string.vacio_listas_titulo)
                 binding.emptyBody.setText(R.string.vacio_listas_texto)
             } else {
@@ -346,19 +387,25 @@ class MainActivity : AppCompatActivity() {
         binding.emptyBox.visibility = View.GONE
         binding.permissionBox.visibility = View.VISIBLE
         binding.trackActions.visibility = View.GONE
+        binding.search.visibility = View.GONE
     }
 
     private fun openGroup(group: Group) {
+        saveBrowseScroll()
+        hideKeyboard(binding.search)
         currentGroup = group
         showTrackList(group)
     }
 
     private fun showTrackList(group: Group) {
         showingTracks = true
+        binding.search.visibility = View.GONE
         binding.permissionBox.visibility = View.GONE
         binding.emptyBox.visibility = View.GONE
         binding.list.visibility = View.VISIBLE
-        binding.list.adapter = trackAdapter
+        if (binding.list.adapter !== trackAdapter) {
+            binding.list.adapter = trackAdapter
+        }
         binding.toolbarTitle.text = group.title
         binding.trackActions.visibility = View.VISIBLE
         binding.btnPlayFolder.visibility = View.VISIBLE
@@ -367,12 +414,34 @@ class MainActivity : AppCompatActivity() {
         val playingUri = MediaControllerCompat.getMediaController(this)
             ?.metadata
             ?.getString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI)
-        trackAdapter.submit(group.tracks, playingUri)
+        val sequential = browseMode == BrowseMode.PLAYLISTS || LibraryGroups.isCompilation(group.tracks)
+        trackAdapter.submit(group.tracks, playingUri, sequentialNumbers = sequential)
     }
 
     private fun closeGroup() {
         currentGroup = null
         showCurrentBrowse()
+        restoreBrowseScroll()
+    }
+
+    private fun saveBrowseScroll() {
+        val lm = binding.list.layoutManager as? LinearLayoutManager ?: return
+        val index = lm.findFirstVisibleItemPosition()
+        val offset = lm.getChildAt(0)?.top ?: 0
+        browseScroll[browseMode] = ScrollPos(index, offset)
+    }
+
+    private fun restoreBrowseScroll() {
+        val pos = browseScroll[browseMode] ?: return
+        binding.list.post {
+            (binding.list.layoutManager as? LinearLayoutManager)
+                ?.scrollToPositionWithOffset(pos.index, pos.offset)
+        }
+    }
+
+    private fun hideKeyboard(view: View) {
+        val imm = getSystemService(InputMethodManager::class.java) ?: return
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun playCurrentGroup(startIndex: Int) {
@@ -575,4 +644,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    private class ScrollPos(val index: Int, val offset: Int)
 }

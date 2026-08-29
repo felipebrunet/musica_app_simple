@@ -13,9 +13,7 @@ data class Track(
     val folderPath: String,
     val folderName: String,
     val path: String?
-) {
-    val albumKey: String get() = "$artist\u0000$album"
-}
+)
 
 data class Group(
     val key: String,

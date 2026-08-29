@@ -14,10 +14,12 @@ class TrackAdapter(
 
     private var items: List<Track> = emptyList()
     private var currentUri: String? = null
+    private var sequentialNumbers: Boolean = false
 
-    fun submit(tracks: List<Track>, playingUri: String?) {
+    fun submit(tracks: List<Track>, playingUri: String?, sequentialNumbers: Boolean = false) {
         items = tracks
         currentUri = playingUri
+        this.sequentialNumbers = sequentialNumbers
         notifyDataSetChanged()
     }
 
@@ -39,7 +41,7 @@ class TrackAdapter(
 
     inner class Holder(private val binding: ItemTrackBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(track: Track, position: Int) {
-            val number = if (track.trackNumber > 0) {
+            val number = if (!sequentialNumbers && track.trackNumber > 0) {
                 track.trackNumber.toString()
             } else {
                 (position + 1).toString()

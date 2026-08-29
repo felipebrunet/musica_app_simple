@@ -84,7 +84,7 @@ Android no instala un APK sin firma. Firma en tu computador, con tu `.jks` (nunc
 # Ejemplo; ajusta alias y rutas. Te pedirá las contraseñas en la terminal.
 "$ANDROID_HOME/build-tools/34.0.0/apksigner" sign \
   --ks /ruta/secreta/tu.jks \
-  --out musica-simple-0.1.4-release.apk \
+  --out musica-simple-0.1.5-release.apk \
   app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 

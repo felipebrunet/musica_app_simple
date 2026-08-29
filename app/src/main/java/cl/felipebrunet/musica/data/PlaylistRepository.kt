@@ -18,28 +18,34 @@ class PlaylistRepository {
 
     fun scan(context: Context, library: List<Track>): List<Playlist> {
         val found = ArrayList<Playlist>()
-        val seen = HashSet<String>()
+        val seenPaths = HashSet<String>()
+        val seenContent = HashSet<String>()
+
+        fun add(parsed: Playlist?) {
+            if (parsed != null && PlaylistIndex.accept(parsed, seenPaths, seenContent)) {
+                found.add(parsed)
+            }
+        }
 
         for (file in ownedDir(context).listFiles().orEmpty()) {
-            val parsed = playlistFromFile(file, library, editable = true, source = "Lista propia")
-            if (parsed != null && seen.add(parsed.id)) found.add(parsed)
+            add(playlistFromFile(file, library, editable = true, source = "Lista propia"))
         }
 
         for (dir in pulsarDirs(context)) {
-            for (file in listPlaylistFiles(dir)) {
-                val parsed = playlistFromFile(file, library, editable = false, source = "Pulsar")
-                if (parsed != null && seen.add(parsed.id)) found.add(parsed)
+            for (file in listPlaylistFiles(dir, includeTxt = true)) {
+                add(playlistFromFile(file, library, editable = false, source = "Pulsar"))
             }
         }
 
         for (root in LibraryRepository.storageRoots(context)) {
             walkPlaylistFiles(root, depth = 0) { file ->
-                val parsed = playlistFromFile(file, library, editable = false, source = "Archivo")
-                if (parsed != null && seen.add(parsed.id)) found.add(parsed)
+                add(playlistFromFile(file, library, editable = false, source = "Archivo"))
             }
         }
 
-        found.addAll(queryMediaStorePlaylists(context, library, seen))
+        for (playlist in queryMediaStorePlaylists(context, library)) {
+            add(playlist)
+        }
         playlists = found.sortedBy { it.title.lowercase() }
         return playlists
     }
@@ -149,9 +155,11 @@ class PlaylistRepository {
         return roots.toList()
     }
 
-    private fun listPlaylistFiles(dir: File): List<File> {
+    private fun listPlaylistFiles(dir: File, includeTxt: Boolean): List<File> {
         if (!dir.isDirectory || !dir.canRead()) return emptyList()
-        return dir.listFiles()?.filter { it.isFile && PlaylistParser.isPlaylistFile(it.name) }.orEmpty()
+        return dir.listFiles()
+            ?.filter { it.isFile && PlaylistParser.isPlaylistFile(it.name, includeTxt) }
+            .orEmpty()
     }
 
     private fun walkPlaylistFiles(dir: File, depth: Int, out: (File) -> Unit) {
@@ -162,7 +170,7 @@ class PlaylistRepository {
             if (child.isDirectory) {
                 if (child.name.equals("Android", ignoreCase = true)) continue
                 walkPlaylistFiles(child, depth + 1, out)
-            } else if (child.isFile && PlaylistParser.isPlaylistFile(child.name)) {
+            } else if (child.isFile && PlaylistParser.isPlaylistFile(child.name, includeTxt = false)) {
                 out(child)
             }
         }
@@ -171,8 +179,7 @@ class PlaylistRepository {
     @Suppress("DEPRECATION")
     private fun queryMediaStorePlaylists(
         context: Context,
-        library: List<Track>,
-        seen: MutableSet<String>
+        library: List<Track>
     ): List<Playlist> {
         if (Build.VERSION.SDK_INT >= 31) return emptyList()
         val result = ArrayList<Playlist>()
@@ -190,7 +197,6 @@ class PlaylistRepository {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val key = "mediastore:$id"
-                    if (!seen.add(key)) continue
                     val name = cursor.getString(nameCol)?.trim().orEmpty().ifBlank { "Lista" }
                     val tracks = queryMembers(context, id, byId, library)
                     if (tracks.isEmpty()) continue
@@ -233,7 +239,6 @@ class PlaylistRepository {
             )?.use { cursor ->
                 val audioCol = cursor.getColumnIndex(MediaStore.Audio.Playlists.Members.AUDIO_ID)
                 val dataCol = cursor.getColumnIndex(MediaStore.Audio.Playlists.Members.DATA)
-                val paths = ArrayList<String>()
                 while (cursor.moveToNext()) {
                     val audioId = if (audioCol >= 0) cursor.getLong(audioCol) else -1L
                     val fromId = byId[audioId]
@@ -243,11 +248,10 @@ class PlaylistRepository {
                     }
                     if (dataCol >= 0) {
                         val path = cursor.getString(dataCol)
-                        if (!path.isNullOrBlank()) paths.add(path)
+                        if (!path.isNullOrBlank()) {
+                            tracks.addAll(PlaylistParser.resolveTracks(listOf(path), library))
+                        }
                     }
-                }
-                if (paths.isNotEmpty()) {
-                    tracks.addAll(PlaylistParser.resolveTracks(paths, library))
                 }
             }
         } catch (_: Exception) {

@@ -3,6 +3,7 @@ package cl.felipebrunet.musica
 import cl.felipebrunet.musica.data.PlaylistParser
 import cl.felipebrunet.musica.data.Track
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,6 +68,26 @@ class PlaylistParserTest {
         assertEquals("Viaje_al_sur", PlaylistParser.safeFileName("Viaje/al:sur"))
         assertTrue(PlaylistParser.isPlaylistFile("favoritos.m3u8"))
         assertTrue(PlaylistParser.isPlaylistFile("pulsar.txt"))
+        assertTrue(PlaylistParser.isPlaylistFile("notas.txt", includeTxt = true))
+        assertFalse(PlaylistParser.isPlaylistFile("notas.txt", includeTxt = false))
+    }
+
+    @Test
+    fun resolveTracksKeepsPlaylistOrder() {
+        val library = listOf(
+            track("A", path = "/storage/emulated/0/Music/Disco/01-a.mp3", display = "01-a.mp3"),
+            track("B", path = "/storage/emulated/0/Music/Disco/02-b.mp3", display = "02-b.mp3"),
+            track("C", path = "/storage/emulated/0/Music/Disco/03-c.mp3", display = "03-c.mp3")
+        )
+        val resolved = PlaylistParser.resolveTracks(
+            listOf(
+                "/storage/emulated/0/Music/Disco/03-c.mp3",
+                "/storage/emulated/0/Music/Disco/01-a.mp3",
+                "/storage/emulated/0/Music/Disco/02-b.mp3"
+            ),
+            library
+        )
+        assertEquals(listOf("C", "A", "B"), resolved.map { it.title })
     }
 
     private fun track(title: String, path: String, display: String): Track {

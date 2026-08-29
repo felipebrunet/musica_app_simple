@@ -5,11 +5,12 @@ import java.util.Locale
 
 object PlaylistParser {
 
-    private val PLAYLIST_EXT = setOf("m3u", "m3u8", "pls", "txt")
+    private val PLAYLIST_EXT = setOf("m3u", "m3u8", "pls")
 
-    fun isPlaylistFile(name: String): Boolean {
+    fun isPlaylistFile(name: String, includeTxt: Boolean = true): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
-        return ext in PLAYLIST_EXT
+        if (ext in PLAYLIST_EXT) return true
+        return includeTxt && ext == "txt"
     }
 
     fun pathsFromText(text: String, playlistDir: String?): List<String> {

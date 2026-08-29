@@ -38,8 +38,11 @@ class LibraryRepository {
     }
 
     private fun dedupeKey(track: Track): String {
-        val path = track.path?.let { normalizePath(it) }
-            return path ?: track.uri
+        if (track.displayName.isNotBlank() && track.folderPath.isNotBlank()) {
+            return identityKey(track.displayName, track.folderPath)
+        }
+        val path = track.path?.let { canonicalStoragePath(it) }.orEmpty()
+        return path.ifBlank { track.uri }
     }
 
     companion object {
@@ -64,9 +67,8 @@ class LibraryRepository {
             )
             if (Build.VERSION.SDK_INT >= 29) {
                 projection.add(MediaStore.Audio.Media.RELATIVE_PATH)
-            } else {
-                projection.add(MediaStore.Audio.Media.DATA)
             }
+            projection.add(MediaStore.Audio.Media.DATA)
 
             val selection = "${MediaStore.Audio.Media.IS_MUSIC}!=0"
 
@@ -87,11 +89,12 @@ class LibraryRepository {
                         val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                         val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                         val mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
-                        val pathCol = if (Build.VERSION.SDK_INT >= 29) {
+                        val relativeCol = if (Build.VERSION.SDK_INT >= 29) {
                             cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
                         } else {
-                            cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                            -1
                         }
+                        val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
 
                         while (cursor.moveToNext()) {
                             val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
@@ -106,8 +109,18 @@ class LibraryRepository {
                                 rawTrack > 0 -> rawTrack
                                 else -> 0
                             }
-                            val location = if (pathCol >= 0) cursor.getString(pathCol) else null
-                            val folder = folderFromStore(location, displayName)
+                            val dataPath = if (dataCol >= 0) {
+                                cursor.getString(dataCol)?.takeIf { it.isNotBlank() }
+                            } else {
+                                null
+                            }
+                            val relative = if (relativeCol >= 0) {
+                                cursor.getString(relativeCol)?.takeIf { it.isNotBlank() }
+                            } else {
+                                null
+                            }
+                            val folder = folderFromStore(dataPath ?: relative, displayName)
+                            val canonicalFolder = canonicalStoragePath(folder.first).ifBlank { folder.first }
                             result.add(
                                 Track(
                                     id = id,
@@ -119,9 +132,9 @@ class LibraryRepository {
                                     trackNumber = number,
                                     discNumber = disc,
                                     displayName = displayName,
-                                    folderPath = folder.first,
+                                    folderPath = canonicalFolder,
                                     folderName = folder.second,
-                                    path = if (Build.VERSION.SDK_INT < 29) location else null
+                                    path = dataPath
                                 )
                             )
                         }
@@ -195,7 +208,8 @@ class LibraryRepository {
 
         private fun trackFromFile(file: File): Track {
             val folder = file.parentFile
-            val folderPath = folder?.absolutePath ?: file.absolutePath
+            val rawFolder = folder?.absolutePath ?: file.absolutePath
+            val canonicalFolder = canonicalStoragePath(rawFolder).ifBlank { rawFolder }
             return Track(
                 id = file.absolutePath.hashCode().toLong(),
                 uri = Uri.fromFile(file).toString(),
@@ -206,8 +220,8 @@ class LibraryRepository {
                 trackNumber = 0,
                 discNumber = 1,
                 displayName = file.name,
-                folderPath = folderPath,
-                folderName = folder?.name ?: folderPath,
+                folderPath = canonicalFolder,
+                folderName = folder?.name ?: canonicalFolder,
                 path = file.absolutePath
             )
         }
@@ -274,8 +288,37 @@ class LibraryRepository {
             return "%d:%02d".format(Locale.US, min, sec)
         }
 
-        private fun normalizePath(path: String): String {
-            return path.replace('\\', '/').lowercase(Locale.US).trimEnd('/')
+        fun identityKey(displayName: String, folderPath: String): String {
+            val name = displayName.trim().lowercase(Locale.US)
+            val folder = canonicalStoragePath(folderPath)
+            return if (folder.isEmpty()) name else "$folder/$name"
+        }
+
+        fun canonicalStoragePath(path: String): String {
+            var value = path.replace('\\', '/').trim()
+            if (value.startsWith("file://", ignoreCase = true)) {
+                value = value.substring(7)
+            } else if (value.startsWith("file:", ignoreCase = true)) {
+                value = value.substring(5)
+            }
+            value = value.lowercase(Locale.US).trim('/')
+            when {
+                value.startsWith("storage/emulated/") -> {
+                    val afterUser = value.substringAfter("storage/emulated/")
+                    value = afterUser.substringAfter('/', missingDelimiterValue = afterUser)
+                }
+                value.startsWith("storage/") -> {
+                    val afterVolume = value.removePrefix("storage/")
+                    value = afterVolume.substringAfter('/', missingDelimiterValue = afterVolume)
+                }
+                value.startsWith("sdcard/") -> value = value.removePrefix("sdcard/")
+                value.startsWith("mnt/sdcard/") -> value = value.removePrefix("mnt/sdcard/")
+                value.startsWith("mnt/media_rw/") -> {
+                    val afterVolume = value.removePrefix("mnt/media_rw/")
+                    value = afterVolume.substringAfter('/', missingDelimiterValue = afterVolume)
+                }
+            }
+            return value.trim('/')
         }
     }
 }

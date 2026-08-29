@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private var currentGroup: Group? = null
     private var browseMode = BrowseMode.ALBUMS
     private var userSeeking = false
+    private var libraryLoadGeneration = 0
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -169,7 +170,7 @@ class MainActivity : AppCompatActivity() {
             maybeAskBackgroundPlayback()
         } else {
             showPermission()
-            requestNeededPermissions()
+            requestNeededPermissions(fromButton = false)
         }
     }
 
@@ -179,6 +180,10 @@ class MainActivity : AppCompatActivity() {
             browser.connect()
         }
         main.post(tick)
+        if (storageGranted() && binding.permissionBox.visibility == View.VISIBLE) {
+            loadLibrary()
+            maybeAskBackgroundPlayback()
+        }
     }
 
     override fun onStop() {
@@ -192,6 +197,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        libraryLoadGeneration++
         io.shutdown()
         super.onDestroy()
     }
@@ -207,28 +213,55 @@ class MainActivity : AppCompatActivity() {
         return list.toTypedArray()
     }
 
-    private fun storageGranted(): Boolean {
-        val permission = if (Build.VERSION.SDK_INT >= 33) {
+    private fun storagePermission(): String {
+        return if (Build.VERSION.SDK_INT >= 33) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
-        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun requestNeededPermissions() {
+    private fun storageGranted(): Boolean {
+        return ContextCompat.checkSelfPermission(this, storagePermission()) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestNeededPermissions(fromButton: Boolean = true) {
+        if (storageGranted()) return
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
+        val asked = prefs.getBoolean("storage_asked", false)
+        val rationale = shouldShowRequestPermissionRationale(storagePermission())
+        if (asked && !rationale) {
+            if (fromButton) openAppSettings()
+            return
+        }
+        prefs.edit().putBoolean("storage_asked", true).apply()
         permissionLauncher.launch(neededPermissions())
+    }
+
+    private fun openAppSettings() {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            )
+        } catch (_: Exception) {
+        }
     }
 
     private fun loadLibrary() {
         binding.permissionBox.visibility = View.GONE
         binding.emptyBox.visibility = View.GONE
         binding.list.visibility = View.VISIBLE
+        val generation = ++libraryLoadGeneration
+        val appContext = applicationContext
         io.execute {
             val app = application as MusicaApp
-            app.library.scan(this)
-            app.playlists.scan(this, app.library.tracks)
+            app.library.scan(appContext)
+            app.playlists.scan(appContext, app.library.tracks)
             main.post {
+                if (isDestroyed || generation != libraryLoadGeneration) return@post
                 if (showingTracks) {
                     val key = currentGroup?.key
                     val groups = currentGroups()
@@ -438,10 +471,12 @@ class MainActivity : AppCompatActivity() {
     private fun saveCurrentGroupAsPlaylist() {
         val group = currentGroup ?: return
         askPlaylistName(group.title) { name ->
+            val appContext = applicationContext
             io.execute {
                 val app = application as MusicaApp
-                app.playlists.create(this, name, group.tracks)
+                app.playlists.create(appContext, name, group.tracks)
                 main.post {
+                    if (isDestroyed) return@post
                     Toast.makeText(this, R.string.lista_guardada, Toast.LENGTH_SHORT).show()
                 }
             }

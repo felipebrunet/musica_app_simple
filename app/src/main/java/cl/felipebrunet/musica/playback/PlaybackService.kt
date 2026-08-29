@@ -16,6 +16,8 @@ import android.net.Uri
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.Process
 import android.support.v4.media.MediaBrowserCompat
@@ -48,10 +50,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private var preparing: Boolean = false
     private var noisyRegistered: Boolean = false
     private var focusGranted: Boolean = false
+    private var resumeOnFocusGain: Boolean = false
+    private var dataSourceStream: FileInputStream? = null
+    private val main = Handler(Looper.getMainLooper())
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                resumeOnFocusGain = false
                 pauseInternal()
             }
         }
@@ -59,13 +65,29 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
-            AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> pauseInternal()
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                resumeOnFocusGain = false
+                pauseInternal()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                resumeOnFocusGain = playWhenReady || actuallyPlaying()
+                pauseInternal()
+            }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                player?.setVolume(0.25f, 0.25f)
+                try {
+                    player?.setVolume(0.25f, 0.25f)
+                } catch (_: IllegalStateException) {
+                }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                player?.setVolume(1f, 1f)
+                try {
+                    player?.setVolume(1f, 1f)
+                } catch (_: IllegalStateException) {
+                }
+                if (resumeOnFocusGain) {
+                    resumeOnFocusGain = false
+                    startPlayback()
+                }
             }
         }
     }
@@ -83,6 +105,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
 
         override fun onPause() {
+            resumeOnFocusGain = false
             pauseInternal()
         }
 
@@ -154,7 +177,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
         sessionToken = session.sessionToken
         createChannel()
         restoreFromDisk()
-        publishState()
+        if (queue.isNotEmpty()) {
+            enterForeground()
+            publishState()
+            if (store.lastPlaying()) {
+                playIndex(index, start = true, seekMs = pendingSeekMs)
+            }
+        } else {
+            publishState()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -213,18 +244,39 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
-    private fun playIndex(newIndex: Int, start: Boolean, seekMs: Long) {
+    private fun playIndex(newIndex: Int, start: Boolean, seekMs: Long, direction: Int = 1) {
         if (queue.isEmpty()) return
-        index = newIndex.coerceIn(0, queue.lastIndex)
-        pendingSeekMs = seekMs.coerceAtLeast(0L)
-        playWhenReady = start
-        val track = queue[index]
-        publishMetadata(track)
-        persist()
-        // Show the notification immediately so a foreground start never times out
-        // while MediaPlayer prepares a large FLAC from the SD card.
-        enterForeground()
+        val dir = if (direction >= 0) 1 else -1
+        val requested = newIndex.coerceIn(0, queue.lastIndex)
+        var attempt = requested
+        var failures = 0
+        while (failures < queue.size) {
+            index = attempt
+            pendingSeekMs = if (attempt == requested) seekMs.coerceAtLeast(0L) else 0L
+            playWhenReady = start
+            val track = queue[index]
+            publishMetadata(track)
+            persist()
+            // Show the notification immediately so a foreground start never times out
+            // while MediaPlayer prepares a large FLAC from the SD card.
+            enterForeground()
+            if (preparePlayer(track)) {
+                publishState()
+                refreshNotification()
+                return
+            }
+            failures++
+            attempt += dir
+            if (attempt !in queue.indices) {
+                pauseInternal()
+                seekInternal(0L)
+                return
+            }
+        }
+        pauseInternal()
+    }
 
+    private fun preparePlayer(track: Track): Boolean {
         releasePlayer()
         preparing = true
         val mp = MediaPlayer()
@@ -257,28 +309,37 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
         mp.setOnErrorListener { _, _, _ ->
             preparing = false
-            skip(+1, start = playWhenReady)
+            main.post { skip(+1, start = playWhenReady) }
             true
         }
-        try {
+        return try {
             setDataSource(mp, track)
             mp.prepareAsync()
+            true
         } catch (_: Exception) {
             preparing = false
-            skip(+1, start = start)
+            releasePlayer()
+            false
         }
-        publishState()
-        refreshNotification()
     }
 
     private fun setDataSource(mp: MediaPlayer, track: Track) {
+        closeDataSourceStream()
         try {
             mp.setDataSource(applicationContext, Uri.parse(track.uri))
         } catch (first: Exception) {
             val path = track.path
             if (path.isNullOrBlank()) throw first
-            FileInputStream(path).use { fis ->
+            val fis = FileInputStream(path)
+            try {
                 mp.setDataSource(fis.fd)
+                dataSourceStream = fis
+            } catch (_: Exception) {
+                try {
+                    fis.close()
+                } catch (_: Exception) {
+                }
+                throw first
             }
         }
     }
@@ -326,6 +387,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     private fun stopInternal() {
+        resumeOnFocusGain = false
         playWhenReady = false
         persist()
         unregisterNoisy()
@@ -344,7 +406,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             seekInternal(0L)
             return
         }
-        playIndex(next, start = start, seekMs = 0L)
+        playIndex(next, start = start, seekMs = 0L, direction = if (delta >= 0) 1 else -1)
     }
 
     private fun seekInternal(pos: Long) {
@@ -394,7 +456,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun persist() {
         if (queue.isEmpty()) return
-        store.save(queue, index, currentPosition())
+        store.save(queue, index, currentPosition(), playWhenReady || actuallyPlaying())
     }
 
     private fun publishMetadata(track: Track) {
@@ -470,6 +532,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
         } catch (_: Exception) {
         }
         player = null
+        closeDataSourceStream()
+    }
+
+    private fun closeDataSourceStream() {
+        try {
+            dataSourceStream?.close()
+        } catch (_: Exception) {
+        }
+        dataSourceStream = null
     }
 
     private fun createChannel() {

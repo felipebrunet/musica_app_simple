@@ -61,6 +61,34 @@ class LibraryGroupsTest {
     }
 
     @Test
+    fun canonicalPathMatchesMediaStoreAndFile() {
+        assertEquals(
+            "music/disco",
+            LibraryRepository.canonicalStoragePath("/storage/emulated/0/Music/Disco")
+        )
+        assertEquals(
+            "music/disco",
+            LibraryRepository.canonicalStoragePath("Music/Disco")
+        )
+        assertEquals(
+            "music/disco",
+            LibraryRepository.canonicalStoragePath("/sdcard/Music/Disco")
+        )
+        assertEquals(
+            "music/disco",
+            LibraryRepository.canonicalStoragePath("/storage/12F5-1A2B/Music/Disco")
+        )
+        assertEquals(
+            "music/disco/01-a.mp3",
+            LibraryRepository.identityKey("01-a.mp3", "Music/Disco")
+        )
+        assertEquals(
+            LibraryRepository.identityKey("01-a.mp3", "Music/Disco"),
+            LibraryRepository.identityKey("01-A.mp3", "/storage/emulated/0/Music/Disco")
+        )
+    }
+
+    @Test
     fun cleanUnknownTags() {
         assertEquals("Artista desconocido", LibraryRepository.cleanArtist("<unknown>"))
         assertEquals("Álbum desconocido", LibraryRepository.cleanAlbum("unknown"))

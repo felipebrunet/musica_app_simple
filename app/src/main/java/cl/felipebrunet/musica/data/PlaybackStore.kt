@@ -7,7 +7,7 @@ class PlaybackStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun save(queue: List<Track>, index: Int, positionMs: Long) {
+    fun save(queue: List<Track>, index: Int, positionMs: Long, playing: Boolean) {
         if (queue.isEmpty() || index !in queue.indices) {
             return
         }
@@ -16,6 +16,7 @@ class PlaybackStore(context: Context) {
             .putString(KEY_QUEUE, queue.joinToString("\n") { it.uri })
             .putInt(KEY_INDEX, index)
             .putLong(KEY_POSITION, positionMs.coerceAtLeast(0L))
+            .putBoolean(KEY_PLAYING, playing)
             .putString(KEY_TITLE, current.title)
             .putString(KEY_ARTIST, current.artist)
             .putString(KEY_ALBUM, current.album)
@@ -29,6 +30,8 @@ class PlaybackStore(context: Context) {
     fun lastPosition(): Long = prefs.getLong(KEY_POSITION, 0L)
 
     fun lastIndex(): Int = prefs.getInt(KEY_INDEX, 0)
+
+    fun lastPlaying(): Boolean = prefs.getBoolean(KEY_PLAYING, false)
 
     fun restoreQueue(library: List<Track>): List<Track> {
         val raw = prefs.getString(KEY_QUEUE, null) ?: return emptyList()
@@ -71,6 +74,7 @@ class PlaybackStore(context: Context) {
         private const val KEY_QUEUE = "queue"
         private const val KEY_INDEX = "index"
         private const val KEY_POSITION = "position"
+        private const val KEY_PLAYING = "playing"
         private const val KEY_TITLE = "title"
         private const val KEY_ARTIST = "artist"
         private const val KEY_ALBUM = "album"

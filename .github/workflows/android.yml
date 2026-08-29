@@ -1,16 +1,18 @@
 name: Android CI
 
+# Solo tests. El APK debug se arma en la máquina de Felipe y se sube a Releases
+# a mano (ver AGENTS.md). No publicar APKs desde aquí.
+
 on:
   push:
     branches: [master, main]
-    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  assemble:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,46 +21,5 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
-      - name: Build debug APK, unsigned release APK, and unit tests
-        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest --stacktrace
-      - name: Keep debug APK for tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-  github-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: assemble
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: debug-apk
-          path: dist
-      - name: Publish debug APK
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          VER="${GITHUB_REF_NAME#v}"
-          NAME="musica-simple-${VER}-debug.apk"
-          APK=$(find dist -name '*.apk' | head -n 1)
-          cp "$APK" "$NAME"
-          gh release create "$GITHUB_REF_NAME" "$NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Música Simple v${VER} (debug)" \
-            --notes-file - <<NOTES
-          Sideload para el Samsung Galaxy A10. Firmado con la clave debug (no es firma de publicación).
-
-          - La música sigue con la pantalla apagada (deja Permitir cuando Android lo pida; en Samsung añade la app a Apps que nunca duermen)
-          - Pestaña Listas: guarda un álbum o carpeta en orden, y lee archivos .m3u en Música
-          - Incluye armeabi-v7a y arm64-v8a
-
-          Instalación: copia el APK al teléfono (orígenes desconocidos) o:
-
-          adb install ${NAME}
-          NOTES
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace

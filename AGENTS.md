@@ -5,16 +5,16 @@ Reglas fijas. No improvisar otras herramientas ni otros flujos.
 ## Git, no `gh`
 
 - El remoto se maneja **solo con `git`**: `git status`, `git add`, `git commit`, `git tag`, `git push`.
-- **Nunca** instalar ni usar `gh`, `hub`, Graphite ni CLIs raros de GitHub.
+- **Nunca** instalar ni usar `gh`, `hub`, Graphite ni CLIs raros de GitHub **en esta máquina**.
 - Push: `git push origin master` y, si hay tag, `git push origin vX.Y.Z`.
 - No force-push a `master`.
 
-## APK: siempre local, nunca GitHub Actions
+## APK debug en GitHub Releases
 
-Esta máquina tiene cores de sobra. **No esperar a CI** para armar ni para publicar el APK. Actions no publica releases.
+Los releases 0.1.2–0.1.4 los publicó **GitHub Actions** (`github-actions[bot]`) al pushear el tag `v*`. En el runner sí hay `GITHUB_TOKEN` (el de Actions). En esta máquina **no hay PAT** para `curl` a la API.
 
 1. Subir `versionName` / `versionCode` en `app/build.gradle.kts` (y el ejemplo del README si aplica).
-2. Compilar aquí:
+2. Compilar aquí si hace falta sideload inmediato:
 
 ```bash
 ./gradlew :app:assembleDebug --max-workers=16
@@ -31,30 +31,16 @@ git push origin master
 git push origin vX.Y.Z
 ```
 
-4. **En cuanto el APK esté compilado**, adjuntarlo a la GitHub Release del mismo tag. Nombre del asset:
+4. El job `github-release` del workflow arma el APK y crea la GitHub Release con asset:
 
 `musica-simple-X.Y.Z-debug.apk`
 
-Subir con `curl` a la API de GitHub (hace falta `GITHUB_TOKEN` en el entorno, un PAT con permiso de contents). **No** usar `gh`. Si no hay token, decirlo y no quedarse esperando a Actions.
-
-Ejemplo (release ya creada o se crea con POST `/releases`):
-
-```bash
-VER=0.1.4
-NAME="musica-simple-${VER}-debug.apk"
-cp app/build/outputs/apk/debug/app-debug.apk "$NAME"
-# token solo por env, nunca en el repo
-curl -sS -X POST \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  -H "Content-Type: application/vnd.android.package-archive" \
-  --data-binary @"$NAME" \
-  "https://uploads.github.com/repos/felipebrunet/musica_app_simple/releases/<id>/assets?name=$NAME"
-```
+El workflow del **commit tageado** es el que corre. Si el tag apunta a un commit sin el job de release, no se publica.
 
 Sideload: `adb install -r musica-simple-X.Y.Z-debug.apk`
 
+Si hay `GITHUB_TOKEN` (PAT con `contents`) en el entorno, también se puede adjuntar a mano con `curl` a `uploads.github.com`. No es el camino habitual.
+
 ## Qué no hacer
 
-- No dejar un tag `v*` “para que CI arme el APK”.
 - No inventar keystores, Play Store, Compose, ExoPlayer ni red. Es un player local para el Galaxy A10.

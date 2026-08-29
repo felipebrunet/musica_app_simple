@@ -64,7 +64,7 @@ El APK de depuración basta para usarlo en casa. **No hay keystore ni secretos e
 
 ### Publicar el debug en GitHub Releases
 
-El APK se genera **en este computador** (`./gradlew :app:assembleDebug`), no en GitHub Actions. Luego: `git tag` + `git push` del tag `vX.Y.Z` y se adjunta `musica-simple-X.Y.Z-debug.apk` a la release. Detalle para Grok: `AGENTS.md`. Solo se usa `git` (nunca `gh`).
+`git tag` + `git push` del tag `vX.Y.Z`. GitHub Actions arma el debug y crea la release con `musica-simple-X.Y.Z-debug.apk`. Detalle para Grok: `AGENTS.md`. En esta máquina solo se usa `git` (nunca `gh`).
 
 Para una build de *release* **sin firmar** (minify/shrink, `debuggable false`):
 

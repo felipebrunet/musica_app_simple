@@ -69,11 +69,7 @@ class MainActivity : AppCompatActivity() {
 
     private val connectionCallback = object : MediaBrowserCompat.ConnectionCallback() {
         override fun onConnected() {
-            val controller = MediaControllerCompat(this@MainActivity, browser.sessionToken)
-            MediaControllerCompat.setMediaController(this@MainActivity, controller)
-            controller.registerCallback(controllerCallback)
-            applyPendingQueue()
-            bindController(controller)
+            attachController()
         }
 
         override fun onConnectionSuspended() = Unit
@@ -178,6 +174,8 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         if (!browser.isConnected) {
             browser.connect()
+        } else {
+            attachController()
         }
         main.post(tick)
         if (storageGranted() && binding.permissionBox.visibility == View.VISIBLE) {
@@ -190,16 +188,34 @@ class MainActivity : AppCompatActivity() {
         main.removeCallbacks(tick)
         val controller = MediaControllerCompat.getMediaController(this)
         controller?.unregisterCallback(controllerCallback)
-        if (browser.isConnected) {
-            browser.disconnect()
-        }
+        // Keep the MediaBrowser bind while the screen is off. Disconnecting here
+        // used to destroy PlaybackService and stop the music immediately.
         super.onStop()
     }
 
     override fun onDestroy() {
         libraryLoadGeneration++
+        if (browser.isConnected) {
+            browser.disconnect()
+        }
         io.shutdown()
         super.onDestroy()
+    }
+
+    private fun attachController() {
+        if (!browser.isConnected) return
+        val current = MediaControllerCompat.getMediaController(this)
+        val controller = if (current != null && current.sessionToken == browser.sessionToken) {
+            current
+        } else {
+            MediaControllerCompat(this, browser.sessionToken).also {
+                MediaControllerCompat.setMediaController(this, it)
+            }
+        }
+        controller.unregisterCallback(controllerCallback)
+        controller.registerCallback(controllerCallback)
+        applyPendingQueue()
+        bindController(controller)
     }
 
     private fun neededPermissions(): Array<String> {
@@ -366,6 +382,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playTracks(tracks: List<Track>, startIndex: Int) {
+        keepPlaybackAlive()
         val app = application as MusicaApp
         val controller = MediaControllerCompat.getMediaController(this)
         if (controller != null) {
@@ -406,8 +423,13 @@ class MainActivity : AppCompatActivity() {
         if (state == PlaybackStateCompat.STATE_PLAYING || state == PlaybackStateCompat.STATE_BUFFERING) {
             controller.transportControls.pause()
         } else {
+            keepPlaybackAlive()
             controller.transportControls.play()
         }
+    }
+
+    private fun keepPlaybackAlive() {
+        ContextCompat.startForegroundService(this, Intent(this, PlaybackService::class.java))
     }
 
     private fun bindController(controller: MediaControllerCompat) {

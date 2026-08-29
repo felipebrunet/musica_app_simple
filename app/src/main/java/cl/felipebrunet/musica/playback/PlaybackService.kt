@@ -51,6 +51,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private var noisyRegistered: Boolean = false
     private var focusGranted: Boolean = false
     private var resumeOnFocusGain: Boolean = false
+    private var startedAsService: Boolean = false
     private var dataSourceStream: FileInputStream? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -189,6 +190,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startedAsService = true
+        enterForeground()
         MediaButtonReceiver.handleIntent(session, intent)
         return START_STICKY
     }
@@ -389,6 +392,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private fun stopInternal() {
         resumeOnFocusGain = false
         playWhenReady = false
+        startedAsService = false
         persist()
         unregisterNoisy()
         abandonFocus()
@@ -570,6 +574,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        promoteToStartedService()
+    }
+
+    private fun promoteToStartedService() {
+        if (startedAsService) return
+        startedAsService = true
+        // Binding via MediaBrowser is not enough: locking the screen runs
+        // Activity.onStop and unbinds. A started FGS keeps audio alive.
+        startService(Intent(this, PlaybackService::class.java))
     }
 
     private fun buildNotification(): Notification {
